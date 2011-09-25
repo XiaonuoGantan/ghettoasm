@@ -1,10 +1,11 @@
 import re
 
 REG_NAMES = [
-	'zero', 'at', 'v0', 'v1', 'a0', 'a1', 'a2', 'a3',
-	't0', 't1', 't2', 't3', 't4', 't5', 't6', 't7',
-	's0', 's1', 's2', 's3', 's4', 's5', 's6', 's7',
-	't8', 't9', 'k0', 'k1', 'gp', 'sp', 'fp', 'ra'
+	'zero', 'ra',
+    'v0', 'v1',
+    'a0', 'a1', 'a2', 'a3',
+	't0', 't1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9',
+	's0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9',
 ]
 
 def signature(sig):
@@ -26,9 +27,24 @@ def parse_instruction(signature, instruction):
     return map(lambda c, o: c(o), signature_to_cast(signature), groups)
 
 
+class RegisterFile(object):
+    def __init__(self):
+        self._registers = [0]*len(REG_NAMES)
+
+    def __getitem__(self, i):
+        return self._registers[i]
+
+    def __setitem__(self, i, val):
+        assert isinstance(val, int)
+        if i == 0: return False
+        self._registers[i] = val
+
+
 class Core(object):
     def __init__(self):
-        self._registers = [0]*32
+        self._pc = 0
+        self._stack = list()
+        self._registers = RegisterFile()
         self._memory = [0]*655360
 
     @signature('RRR')
@@ -84,6 +100,23 @@ class Core(object):
         self._registers[rd] = C
 
     @signature('R')
+    def inst_stpop(self, rd):
+        self._registers[rd] = self._stack.pop()
+
+    @signature('R')
+    def inst_stpush(self, rd):
+        self._stack.append(self._registers[rd])
+
+    @signature('C')
+    def inst_stpushi(self, C):
+        self._stack.append(C)
+
+    @signature('C')
+    def inst_jal(self, C):
+        self._registers[1] = self._pc + 1
+        self._pc = C
+
+    @signature('R')
     def inst_pkr(self, r):
         return self._registers[r]
 
@@ -98,7 +131,8 @@ class Runtime(object):
 
     def do_instruction(self, instruction):
         op, rest = instruction.split(' ', 1)
-        meth = getattr(self._core, 'inst_%s' % op)
+        meth = getattr(self._core, 'inst_%s' % op, None)
+        if meth is None: return
         return meth(*parse_instruction(meth.sig, rest))
 
 
