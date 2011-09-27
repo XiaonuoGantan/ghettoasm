@@ -1,8 +1,8 @@
 from twisted.words.protocols import irc
 from twisted.internet import reactor, protocol, ssl
 import random, datetime
-import time, sys
-from ibasm import Runtime
+import time, sys, re
+from ibasm import Runtime, ParseError
 
 SERVER = sys.argv[1]
 NICKNAME = sys.argv[2]
@@ -21,10 +21,19 @@ class GhettoAsmBot(irc.IRCClient):
     def privmsg(self, user, channel, message):
         nick = user.split('!', 1)[0]
         if message.startswith('= '):
-            retval = self._runtime.do_instruction(message[2:])
-            if retval is not None:
-                self.say(channel, "%s: %s" % (nick, str(retval)))
-
+            try:
+                for submsg in re.split(";\s{0,}", message[2:]):
+                    if not submsg: next
+                    retval = self._runtime.do_instruction(submsg)
+                    if retval is not None:
+                        self.say(channel, "%s: %s" % (nick, str(retval)))
+            except ParseError as e:
+                self.say(channel, str(e))
+        if message.startswith('=$ '):
+            for submsg in re.split(";\s{0,}", message[2:]):
+                retval = self._runtime.do_compiled_instruction(int(submsg))
+                if retval is not None:
+                    self.say(channel, "%s: %s" % (nick, str(retval)))
 
 class AsmBotFactory(protocol.ClientFactory):
     protocol = GhettoAsmBot
